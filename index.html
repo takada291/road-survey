@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>路網踏査v0.0</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: sans-serif; margin: 10px; background-color: #f0f4f8; color: #333; -webkit-tap-highlight-color: transparent; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        h1 { font-size: 1.1rem; margin-top: 0; color: #004a99; text-align: center; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        .setting-group { margin-bottom: 15px; background: #eef; padding: 10px; border-radius: 8px; }
+        select { width: 100%; padding: 12px; font-size: 1rem; border-radius: 6px; border: 1px solid #ccc; background: white; }
+        .display { background: #333; color: #0f0; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-family: monospace; }
+        .display div { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.9rem; }
+        .display .val { font-weight: bold; color: #fff; }
+        
+        button { width: 100%; padding: 14px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1rem; margin-bottom: 10px; transition: background 0.3s; }
+        
+        /* トラッキングボタン（青→赤へ変化） */
+        .btn-gps { background: #007bff; color: white; margin-bottom: 5px; } 
+        .btn-gps.tracking { background: #dc3545; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+
+        /* 出力ボタン群のデザイン */
+        .btn-csv { background: #6c757d; color: white; margin-bottom: 5px; }
+        .btn-geojson { background: #6f42c1; color: white; margin-bottom: 5px; } /* GIS用ボタン：紫 */
+        .btn-kml { background: #e67e22; color: white; } /* ALANDIS用ボタン：オレンジ */
+
+        .btn-map { background: #ff9800; color: white; margin-bottom: 5px; }
+        .btn-clear { background: #fff; color: #dc3545; border: 1px solid #dc3545; font-size: 0.8rem; padding: 10px; margin-top: 20px; width: 100%; }
+        
+        /* 行削除ボタン */
+        .btn-delete-row { background: #ff4d4d; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; width: auto; margin: 0; }
+
+        input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; font-size: 1rem; }
+        
+        #map { height: 350px; width: 100%; border-radius: 8px; margin-bottom: 15px; display: none; border: 1px solid #ccc; }
+        .map-hint { font-size: 0.8rem; color: #666; text-align: center; margin-top: 0; margin-bottom: 15px; }
+
+        .table-container { overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75rem; min-width: 500px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
+        th { background: #f8f9fa; color: #666; white-space: nowrap; }
+        
+        tbody tr:hover { background-color: #f0f8ff; }
+
+        /* GPSステータス表示用 */
+        #status { font-size: 0.9rem; color: #007bff; text-align: center; margin-bottom: 15px; height: 1.2em; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>路網踏査v0.0</h1>
+    
+    <p style="font-size:0.85rem; color:#666; margin-top:10px;">事前に調査箇所周辺の地図を閲覧して下さい。地図データが保存されます。</p>
+    
+    <div class="setting-group">
+        <label style="font-size:0.8rem; font-weight:bold;">座標系選択:</label>
+        <select id="systemSelect">
+            <option value="1">第 1 系</option><option value="2">第 2 系</option>
+            <option value="3">第 3 系</option><option value="4">第 4 系</option>
+            <option value="5">第 5 系</option><option value="6" selected>第 6 系 (福井等)</option>
+            <option value="7">第 7 系</option><option value="8">第 8 系</option>
+            <option value="9">第 9 系</option><option value="10">第 10 系</option>
+            <option value="11">第 11 系</option><option value="12">第 12 系</option>
+            <option value="13">第 13 系</option><option value="14">第 14 系</option>
+            <option value="15">第 15 系</option><option value="16">第 16 系</option>
+            <option value="17">第 17 系</option><option value="18">第 18 系</option>
+            <option value="19">第 19 系</option>
+        </select>
+    </div>
+
+    <div class="display">
+        <div><span>緯度:</span> <span class="val" id="lat">---</span></div>
+        <div><span>経度:</span> <span class="val" id="lon">---</span></div>
+        <hr style="border:0; border-top:1px solid #555;">
+        <div><span>X (北方向):</span> <span class="val" id="posX">---</span> m</div>
+        <div><span>Y (東方向):</span> <span class="val" id="posY">---</span> m</div>
+    </div>
+
+    <button class="btn-gps" id="btnGps">現在地を連続して取得 (開始)</button>
+    <div id="status">待機中</div>
+    
+    <input type="text" id="memo" placeholder="メモ（記録中に変更可能）">
+    
+    <button class="btn-csv" id="btnCsv">CSV形式で出力</button>
+    <button class="btn-geojson" id="btnGeojson">GeoJSON形式で出力（ライン）</button>
+    <button class="btn-kml" id="btnKml">KML形式で出力（ライン）</button>
+    
+    <button class="btn-map" id="btnMap">位置を確認</button>
+    <p class="map-hint">地図表示中に行タップでズームします。</p>
+
+    <div id="map"></div>
+
+    <div class="table-container">
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th style="width: 40px;">操作</th>
+                    <th>日付時刻</th>
+                    <th>系</th>
+                    <th>X (m)</th>
+                    <th>Y (m)</th>
+                    <th>メモ</th>
+                </tr>
+            </thead>
+            <tbody id="dataBody"></tbody>
+        </table>
+    </div>
+
+    <button class="btn-clear" id="btnClear">全データ消去</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // --- PWA登録 & 更新検知 ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed') {
+                            if (navigator.serviceWorker.controller) {
+                                if (confirm("最新版があります。更新しますか？")) {
+                                    if (reg.waiting) {
+                                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                                    }
+                                    window.location.reload();
+                                }
+                            }
+                        }
+                    };
+                };
+            }).catch(err => console.error('PWA登録失敗', err));
+        });
+        let refreshing;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            window.location.reload();
+            refreshing = true;
+        });
+    }
+
+    // --- 設定 ---
+    // GPS取得間隔 (ミリ秒)。山歩きを考慮して15秒に設定。
+    const GPS_INTERVAL = 15000; 
+
+    // --- 変数 ---
+    const SYSTEM_ORIGINS = {
+        1:[33,129.5], 2:[33,131], 3:[36,132.166666666], 4:[33,133.5], 5:[33,134.333333333],
+        6:[36,136], 7:[36,137.166666666], 8:[36,138.5], 9:[36,139.833333333], 10:[40,140.833333333],
+        11:[40,142.833333333], 12:[44,142.25], 13:[44,143.333333333], 14:[44,145.833333333],
+        15:[26,124], 16:[26,127], 17:[26,131], 18:[20,136], 19:[26,154]
+    };
+
+    let currentRaw = null;
+    let map = null;
+    let mapLayerGroup = null; // マーカーとラインをまとめるレイヤー
+    const STORAGE_KEY = 'roadSurveyDataV0'; // キー名を変更
+    let trackingIntervalId = null;
+    let isTracking = false;
+
+    // --- 座標変換関数 ---
+    function convert(lat, lon, sysId) {
+        const origin = SYSTEM_ORIGINS[sysId];
+        const phi0 = origin[0] * Math.PI / 180;
+        const lam0 = origin[1] * Math.PI / 180;
+        const phi = lat * Math.PI / 180;
+        const lam = lon * Math.PI / 180;
+        const a = 6378137.0, f = 1/298.257222101, m0 = 0.9999;
+        const e2 = f*(2-f), n = f/(2-f);
+        const ap = (a/(1+n))*(1 + (n**2)/4 + (n**4)/64);
+        const beta = [0, (1/2)*n-(2/3)*(n**2)+(5/16)*(n**3), (13/48)*(n**2)-(3/5)*(n**3), (61/240)*(n**3)];
+        const dl = lam - lam0;
+        const t = Math.sinh(Math.atanh(Math.sin(phi)) - (2*Math.sqrt(n)/(1+n))*Math.atanh((2*Math.sqrt(n)/(1+n))*Math.sin(phi)));
+        const xip = Math.atan(t / Math.cos(dl)), etap = Math.atanh(Math.sin(dl) / Math.sqrt(1 + t**2));
+        let xi = xip, eta = etap;
+        for(let j=1; j<=3; j++) {
+            xi += beta[j]*Math.sin(2*j*xip)*Math.cosh(2*j*etap);
+            eta += beta[j]*Math.cos(2*j*xip)*Math.sinh(2*j*etap);
+        }
+        const s = (p) => {
+            const A = 1 + (3/4)*e2 + (45/64)*(e2**2) + (175/256)*(e2**3);
+            const B = (3/4)*e2 + (15/16)*(e2**2) + (525/512)*(e2**3);
+            const C = (15/64)*(e2**2) + (105/256)*(e2**3);
+            return a*(1-e2)*(A*p - (B/2)*Math.sin(2*p) + (C/4)*Math.sin(4*p));
+        };
+        return { x: m0*ap*xi - m0*s(phi0), y: m0*ap*eta };
+    }
+
+    // --- GPS連続取得の開始/停止 ---
+    function toggleTracking() {
+        const btn = document.getElementById('btnGps');
+        const status = document.getElementById('status');
+
+        if (isTracking) {
+            // 停止処理
+            clearInterval(trackingIntervalId);
+            isTracking = false;
+            btn.innerHTML = "現在地を連続して取得 (開始)";
+            btn.classList.remove('tracking');
+            status.innerText = "一時停止中";
+            status.style.color = "#666";
+        } else {
+            // 開始処理
+            if(!confirm("15秒間隔でGPSを取得し、自動保存を開始します。\nバッテリー残量にご注意ください。")) return;
+            
+            isTracking = true;
+            btn.innerHTML = "停止する (記録中)";
+            btn.classList.add('tracking');
+            status.innerText = "GPS探索中...";
+            status.style.color = "#dc3545";
+            
+            // 初回即時実行
+            getLocationAndSave();
+            
+            // 定期実行設定
+            trackingIntervalId = setInterval(getLocationAndSave, GPS_INTERVAL);
+        }
+    }
+
+    function getLocationAndSave() {
+        if(!isTracking) return;
+        
+        const status = document.getElementById('status');
+        
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                status.innerText = "記録中 (" + new Date().toLocaleTimeString() + ")";
+                status.style.color = "#dc3545"; // 赤色で稼働中を示す
+                currentRaw = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                updateCoordsDisplay();
+                autoSave(); // 取得成功したら即保存
+            },
+            err => {
+                console.error(err);
+                status.innerText = "測位不可(リトライ中)...";
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }
+
+    function updateCoordsDisplay() {
+        if (!currentRaw) return;
+        const sysId = document.getElementById('systemSelect').value;
+        const res = convert(currentRaw.lat, currentRaw.lon, sysId);
+        document.getElementById('lat').innerText = currentRaw.lat.toFixed(6);
+        document.getElementById('lon').innerText = currentRaw.lon.toFixed(6);
+        document.getElementById('posX').innerText = res.x.toFixed(3);
+        document.getElementById('posY').innerText = res.y.toFixed(3);
+        currentRaw.x = res.x; currentRaw.y = res.y; currentRaw.system = sysId;
+    }
+
+    // --- 自動保存 ---
+    function autoSave() {
+        if (!currentRaw) return;
+        const now = new Date();
+        const timestamp = now.getFullYear() + "/" + ("0"+(now.getMonth()+1)).slice(-2) + "/" + ("0"+now.getDate()).slice(-2) + " " + now.toLocaleTimeString('ja-JP');
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        
+        // メモの内容を取得
+        const memoVal = document.getElementById('memo').value;
+        
+        data.push({ time: timestamp, ...currentRaw, memo: memoVal });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        
+        render(); // テーブル更新
+        
+        // 地図が表示されていれば更新
+        const mapDiv = document.getElementById('map');
+        if (mapDiv.style.display === 'block') {
+            showMap();
+        }
+    }
+
+    // --- データ削除 (1行) ---
+    window.deleteData = function(index) {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        // 最新が上に来ている表示順序なので、インデックスを逆転させる必要があるか、
+        // render時にdata-index属性を持たせるのが確実。
+        // ここでは配列そのものを修正するため、保存されている配列のインデックスを使用する。
+        
+        if(confirm("この地点データを削除しますか？")) {
+            data.splice(index, 1); // 指定インデックスを削除
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            render();
+            if (document.getElementById('map').style.display === 'block') {
+                showMap();
+            }
+        }
+    }
+
+    function render() {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        // 表示用に逆順にするが、削除用に元のインデックスを保持したい
+        // mapでindex付きのオブジェクトにしてからreverseする
+        const displayData = data.map((d, i) => ({...d, originalIndex: i})).reverse();
+        
+        const html = displayData.map(d => 
+            `<tr onclick="focusOnPin(${d.lat}, ${d.lon})">
+                <td onclick="event.stopPropagation()">
+                    <button class="btn-delete-row" onclick="deleteData(${d.originalIndex})">消去</button>
+                </td>
+                <td>${d.time}</td>
+                <td>${d.system}系</td>
+                <td>${d.x.toFixed(1)}</td>
+                <td>${d.y.toFixed(1)}</td>
+                <td>${d.memo}</td>
+            </tr>`
+        ).join('');
+        document.getElementById('dataBody').innerHTML = html;
+    }
+
+    // --- 地図表示 (ライン表示) ---
+    function showMap() {
+        const dataList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if (dataList.length === 0 && !currentRaw) {
+            return alert("データがありません。");
+        }
+        
+        const mapDiv = document.getElementById('map');
+        mapDiv.style.display = 'block';
+
+        if (!map) {
+            map = L.map('map');
+            L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+                attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>地理院タイル</a>"
+            }).addTo(map);
+            mapLayerGroup = L.layerGroup().addTo(map);
+        }
+        
+        mapLayerGroup.clearLayers();
+        
+        const latlngs = [];
+        const markers = [];
+
+        // データの点を追加
+        dataList.forEach(d => {
+            const ll = [d.lat, d.lon];
+            latlngs.push(ll);
+            // 点も小さく表示
+            const m = L.circleMarker(ll, { radius: 4, color: '#004a99', fillColor: '#fff', fillOpacity: 1 });
+            m.bindPopup(`<b>${d.time}</b><br>${d.memo}`);
+            markers.push(m);
+            mapLayerGroup.addLayer(m);
+        });
+
+        // 現在地があれば追加
+        if (currentRaw) {
+            const m = L.circleMarker([currentRaw.lat, currentRaw.lon], {
+                color: 'red', fillColor: '#f03', fillOpacity: 0.8, radius: 8
+            }).bindPopup("現在地");
+            mapLayerGroup.addLayer(m);
+        }
+
+        // ラインを描画
+        if (latlngs.length > 1) {
+            const polyline = L.polyline(latlngs, {color: '#004a99', weight: 4}).addTo(mapLayerGroup);
+            map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+        } else if (latlngs.length === 1) {
+             map.setView(latlngs[0], 16);
+        } else {
+             // データなしの場合、初期位置（福井）
+             map.setView([36, 136], 10);
+        }
+        
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    function focusOnPin(lat, lon) {
+        const mapDiv = document.getElementById('map');
+        if (mapDiv.style.display !== 'block' || !map) {
+            showMap(); 
+        }
+        setTimeout(() => {
+            map.setView([lat, lon], 18); 
+        }, 100);
+    }
+
+    function clearAllData() {
+        if(window.confirm("保存されている全てのデータを消去します。よろしいですか？")) {
+            localStorage.removeItem(STORAGE_KEY);
+            render();
+            if(mapLayerGroup) mapLayerGroup.clearLayers();
+            alert("消去が完了しました");
+        }
+    }
+
+    // --- 共通ヘルパー関数 ---
+    function getTimestampStr(now) {
+        const yyyy = now.getFullYear();
+        const mm = ("0" + (now.getMonth() + 1)).slice(-2);
+        const dd = ("0" + now.getDate()).slice(-2);
+        const hh = ("0" + now.getHours()).slice(-2);
+        const min = ("0" + now.getMinutes()).slice(-2);
+        return `${yyyy}${mm}${dd}-${hh}${min}`;
+    }
+
+    function downloadFile(content, fileName, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        a.click();
+    }
+
+    // 1. CSV形式で出力 (バックアップ用)
+    function exportCSV() {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if(data.length === 0) return alert("データがありません");
+        let csv = "\uFEFF日時,系,緯度,経度,X(m),Y(m),メモ\n";
+        data.forEach(d => {
+            csv += `${d.time},${d.system},${d.lat},${d.lon},${d.x.toFixed(3)},${d.y.toFixed(3)},${d.memo}\n`;
+        });
+        const now = new Date();
+        const fileName = `路網踏査-${getTimestampStr(now)}.csv`;
+        downloadFile(csv, fileName, 'text/csv;charset=utf-8;');
+    }
+
+    // 2. GeoJSON形式で出力 (LineStringとして出力)
+    function exportGeoJSON() {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if(data.length < 2) return alert("データが2点以上必要です");
+
+        const coords = data.map(d => [d.lon, d.lat]);
+
+        const geoJsonData = {
+            "type": "FeatureCollection",
+            "name": "RoadSurveyLine",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": coords
+                    },
+                    "properties": {
+                        "name": "踏査ルート",
+                        "time_start": data[0].time,
+                        "time_end": data[data.length-1].time,
+                        "point_count": data.length
+                    }
+                }
+            ]
+        };
+
+        const jsonStr = JSON.stringify(geoJsonData, null, 2);
+        const now = new Date();
+        const fileName = `路網踏査-${getTimestampStr(now)}.geojson`;
+        downloadFile(jsonStr, fileName, 'application/geo+json');
+    }
+
+    // 3. KML形式で出力 (LineStringとして出力)
+    function exportKML() {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if(data.length < 2) return alert("データが2点以上必要です");
+
+        // 座標文字列の作成 (lon,lat,alt)
+        const coordsStr = data.map(d => `${d.lon},${d.lat},0`).join(" ");
+
+        let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>路網踏査データ</name>
+    <Style id="lineStyle">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>4</width>
+      </LineStyle>
+    </Style>
+    <Placemark>
+      <name>踏査ルート</name>
+      <description>開始: ${data[0].time} - 終了: ${data[data.length-1].time}</description>
+      <styleUrl>#lineStyle</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>
+          ${coordsStr}
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>`;
+
+        const now = new Date();
+        const fileName = `路網踏査-${getTimestampStr(now)}.kml`;
+        downloadFile(kml, fileName, 'application/vnd.google-earth.kml+xml');
+    }
+
+    // イベントリスナー
+    document.getElementById('btnGps').addEventListener('click', toggleTracking);
+    document.getElementById('btnMap').addEventListener('click', showMap);
+    
+    document.getElementById('btnCsv').addEventListener('click', exportCSV);
+    document.getElementById('btnGeojson').addEventListener('click', exportGeoJSON);
+    document.getElementById('btnKml').addEventListener('click', exportKML);
+    
+    document.getElementById('btnClear').addEventListener('click', clearAllData);
+    document.getElementById('systemSelect').addEventListener('change', updateCoordsDisplay);
+
+    render();
+</script>
+</body>
+</html>
