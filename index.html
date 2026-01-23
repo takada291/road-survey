@@ -92,7 +92,10 @@
     
     <input type="text" id="memo" placeholder="メモ（記録中に変更可能）">
     
+    <!--　機能は残してボタンは非表示
     <button class="btn-csv" id="btnCsv">CSV形式で出力</button>
+    -->
+    
     <button class="btn-geojson" id="btnGeojson">GeoJSON形式で出力（ライン・QGIS用）</button>
     <button class="btn-kml" id="btnKml">KML形式で出力（ライン・ALANDIS用）</button>
     
@@ -152,8 +155,8 @@
     }
 
     // --- 設定 ---
-    // GPS取得間隔 (ミリ秒)。山歩きを考慮して15秒に設定。
-    const GPS_INTERVAL = 15000; 
+    // GPS取得間隔 (ミリ秒)。山歩きを考慮して15→10秒に設定。
+    const GPS_INTERVAL = 10000; 
 
     // --- 変数 ---
     const SYSTEM_ORIGINS = {
@@ -513,5 +516,6 @@
 </body>
 
 </html>
+
 
 
