@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>路網踏査v1.0</title>
+    <title>路網踏査</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -59,7 +59,7 @@
 <body>
 
 <div class="card">
-    <h1>路網踏査v1.0</h1>
+    <h1>路網踏査v1.1</h1>
     
     <p style="font-size:0.85rem; color:#666; margin-top:10px;">事前に調査箇所周辺の地図を閲覧して下さい。地図データが保存されます。</p>
     
@@ -90,11 +90,7 @@
     <button class="btn-gps" id="btnGps">現在地を連続して取得 (開始)</button>
     <div id="status">待機中</div>
     
-    <input type="text" id="memo" placeholder="メモ（記録中に変更可能）">
-    
-    <!--　機能は残してボタンは非表示
-    <button class="btn-csv" id="btnCsv">CSV形式で出力</button>
-    -->
+    <input type="text" id="memo" placeholder="メモ（記録中に変更可能）" style="display:none;">
     
     <button class="btn-geojson" id="btnGeojson">GeoJSON形式で出力（ライン・QGIS用）</button>
     <button class="btn-kml" id="btnKml">KML形式で出力（ライン・ALANDIS用）</button>
@@ -502,9 +498,20 @@
 
     // イベントリスナー
     document.getElementById('btnGps').addEventListener('click', toggleTracking);
-    document.getElementById('btnMap').addEventListener('click', showMap);
     
-    document.getElementById('btnCsv').addEventListener('click', exportCSV);
+    // --- 【修正】地図ボタンは表示/非表示をトグルするように変更 ---
+    document.getElementById('btnMap').addEventListener('click', function() {
+        const mapDiv = document.getElementById('map');
+        if (mapDiv.style.display === 'block') {
+            mapDiv.style.display = 'none';
+        } else {
+            showMap();
+        }
+    });
+    
+    // --- 【修正】HTML上でbtnCsvがコメントアウトされているため、JSでも無効化 ---
+    // document.getElementById('btnCsv').addEventListener('click', exportCSV);
+    
     document.getElementById('btnGeojson').addEventListener('click', exportGeoJSON);
     document.getElementById('btnKml').addEventListener('click', exportKML);
     
@@ -516,7 +523,3 @@
 </body>
 
 </html>
-
-
-
-
