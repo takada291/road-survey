@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>路網踏査</title>
+    <title>路網踏査v1.2</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -59,7 +59,7 @@
 <body>
 
 <div class="card">
-    <h1>路網踏査v1.1</h1>
+    <h1>路網踏査v1.2</h1>
     
     <p style="font-size:0.85rem; color:#666; margin-top:10px;">事前に調査箇所周辺の地図を閲覧して下さい。地図データが保存されます。</p>
     
@@ -85,6 +85,8 @@
         <hr style="border:0; border-top:1px solid #555;">
         <div><span>X (北方向):</span> <span class="val" id="posX">---</span> m</div>
         <div><span>Y (東方向):</span> <span class="val" id="posY">---</span> m</div>
+        <hr style="border:0; border-top:1px solid #555;">
+        <div><span>移動距離:</span> <span class="val" id="totalDist">0</span> m</div>
     </div>
 
     <button class="btn-gps" id="btnGps">現在地を連続して取得 (開始)</button>
@@ -299,8 +301,26 @@
         }
     }
 
+    // --- 【修正】合計距離計算・表示 ---
+    function updateTotalDistance() {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        let total = 0;
+        if (data.length > 1) {
+            for (let i = 0; i < data.length - 1; i++) {
+                const p1 = L.latLng(data[i].lat, data[i].lon);
+                const p2 = L.latLng(data[i+1].lat, data[i+1].lon);
+                total += p1.distanceTo(p2);
+            }
+        }
+        document.getElementById('totalDist').innerText = Math.round(total);
+    }
+
     function render() {
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        
+        // --- 距離表示の更新 ---
+        updateTotalDistance();
+
         // 表示用に逆順にするが、削除用に元のインデックスを保持したい
         // mapでindex付きのオブジェクトにしてからreverseする
         const displayData = data.map((d, i) => ({...d, originalIndex: i})).reverse();
