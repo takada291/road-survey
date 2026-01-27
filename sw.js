@@ -1,4 +1,4 @@
-const CACHE_NAME = 'road-survey-v1.1.0';
+const CACHE_NAME = 'road-survey-v1.2.0';
 const urlsToCache = [
   './',
   './index.html',
@@ -57,6 +57,7 @@ self.addEventListener('message', (event) => {
   }
 
 });
+
 
 
 
