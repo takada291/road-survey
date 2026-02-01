@@ -1,9 +1,9 @@
 {
-  "name": "AI日報ツール",
-  "short_name": "AI日報",
+  "name": "路網踏査ツール",
+  "short_name": "路網踏査",
   "start_url": "./index.html",
   "display": "standalone",
-  "theme_color": "#2E7D32",
+  "theme_color": "#004a99",
   "background_color": "#f0f4f8",
   "icons": [
     {
